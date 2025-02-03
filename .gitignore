@@ -39,4 +39,7 @@ proguard/
 *.war
 *.ear%
 
-dependency-reduced-pom.xml
+dependency-reduced-pom.xmli
+
+generated-create.ddl
+generated-drop.ddl
