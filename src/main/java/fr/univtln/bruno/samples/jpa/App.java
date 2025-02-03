@@ -36,7 +36,7 @@ public class App {
   private static final Server dbServer;
 
   private static final class DatabaseConfig {
-    private static final String DB_ARGS[] = {"-tcpAllowOthers","-webAllowOthers","-pgAllowOthers","-ifNotExists"};
+    private static final String[] DB_ARGS = {"-tcpAllowOthers","-webAllowOthers","-pgAllowOthers","-ifNotExists"};
     private static final String PERSISTENCE_UNIT = "tpJakartaUnit";
   }
 
@@ -83,6 +83,7 @@ public class App {
       .entityManagerFactory(getEntityManagerFactory())
       .bookCount(2000)
       .authorCount(180)
+      .userCount(1000)
       .loanCount(2000)
       .build()) {
       dataGenerator.generateData();

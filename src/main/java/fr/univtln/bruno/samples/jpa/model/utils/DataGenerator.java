@@ -26,6 +26,7 @@ public class DataGenerator implements AutoCloseable {
   private final Faker faker = new Faker();
   private final Random random = new Random();
   private final int authorCount;
+  private final int userCount;
   private final int bookCount;
   private final int loanCount;
   private final EntityManager entityManager;
@@ -35,20 +36,23 @@ public class DataGenerator implements AutoCloseable {
    *
    * @param entityManagerFactory the factory to create EntityManager instances
    * @param authorCount the number of authors to generate
+   * @param userCount the number of users to generate
    * @param bookCount the number of books to generate
    * @param loanCount the number of loans to generate
    */
   @Builder
   private DataGenerator(EntityManagerFactory entityManagerFactory,
                         int authorCount,
+                        int userCount,
                         int bookCount,
                         int loanCount) {
     if (entityManagerFactory == null)
       throw new IllegalArgumentException("EntityManagerFactory cannot be null");
-    if (authorCount < 0 || bookCount < 0 || loanCount < 0)
+    if (authorCount < 0 || bookCount < 0 || loanCount < 0 || userCount < 0)
       throw new IllegalArgumentException("Count values must be positive");
 
     this.authorCount = authorCount;
+    this.userCount = userCount;
     this.bookCount = bookCount;
     this.loanCount = loanCount;
     this.entityManager = entityManagerFactory.createEntityManager();
@@ -138,14 +142,28 @@ public class DataGenerator implements AutoCloseable {
   }
 
   /**
+   /**
    * Creates a new User with random data.
+   * Ensures the email is unique by checking the database.
    *
    * @return a new User instance
    */
   public User createUser() {
-    User user = new User();
-    user.setName(faker.name().fullName());
-    user.setEmail(faker.internet().emailAddress());
+    User user;
+    String email;
+    do {
+      email = faker.internet().emailAddress();
+      TypedQuery<Long> query = entityManager.createQuery(
+        "SELECT COUNT(u) FROM User u WHERE u.email = :email", Long.class);
+      query.setParameter("email", email);
+      long count = query.getSingleResult();
+      if (count == 0) {
+        user = new User();
+        user.setName(faker.name().fullName());
+        user.setEmail(email);
+        break;
+      }
+    } while (true);
     return user;
   }
 
@@ -161,6 +179,11 @@ public class DataGenerator implements AutoCloseable {
         .mapToObj(i -> createAuthor())
         .forEach(entityManager::persist);
 
+      // Generate users
+      IntStream.range(0, userCount)
+        .mapToObj(i -> createUser())
+        .forEach(entityManager::persist);
+
       // Generate books
       IntStream.range(0, bookCount)
         .mapToObj(i -> createBook())
@@ -169,15 +192,24 @@ public class DataGenerator implements AutoCloseable {
       // Generate loans
       IntStream.range(0, loanCount)
         .forEach(i -> {
-          User user = createUser();
-          entityManager.persist(user);
-          entityManager.persist(createLoan(user));
+          entityManager.persist(createLoan(getRandomUser()));
         });
       entityManager.getTransaction().commit();
     } catch (Exception e) {
       entityManager.getTransaction().rollback();
       log.error("Error generating data", e);
     }
+  }
+
+  /**
+   * Retrieves a random user from the database.
+   *
+   * @return a random User instance
+   */
+  private User getRandomUser() {
+    TypedQuery<User> query = entityManager.createQuery("SELECT u FROM User u ORDER BY FUNCTION('RAND')", User.class);
+    query.setMaxResults(1);
+    return query.getSingleResult();
   }
 
   /**
