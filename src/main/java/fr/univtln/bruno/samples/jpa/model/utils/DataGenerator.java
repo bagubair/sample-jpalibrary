@@ -191,9 +191,7 @@ public class DataGenerator implements AutoCloseable {
 
       // Generate loans
       IntStream.range(0, loanCount)
-        .forEach(i -> {
-          entityManager.persist(createLoan(getRandomUser()));
-        });
+        .forEach(i -> entityManager.persist(createLoan(getRandomUser())));
       entityManager.getTransaction().commit();
     } catch (Exception e) {
       entityManager.getTransaction().rollback();

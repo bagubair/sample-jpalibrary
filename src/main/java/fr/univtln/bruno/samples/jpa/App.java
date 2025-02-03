@@ -22,49 +22,51 @@ import java.sql.SQLException;
  * ensuring they are available throughout the application's lifecycle.
  * The H2 database server is started with TCP connections allowed from other hosts,
  * and the EntityManagerFactory is created using the "tpJakartaUnit" persistence unit.
- *
- * @author Your Name
- * @version 1.0
- * @see EntityManagerFactory
- * @see Server
  */
 @Slf4j
 public class App {
 
   private static final EntityManagerFactory emf;
 
-  private static final Server dbServer;
-
-  private static final class DatabaseConfig {
-    private static final String[] DB_ARGS = {"-tcpAllowOthers","-webAllowOthers","-pgAllowOthers","-ifNotExists"};
-    private static final String PERSISTENCE_UNIT = "tpJakartaUnit";
-  }
+  private static final Server h2Server;
+  private static final Server webServer;
 
   static {
-    Server tryServer = null;
+    Server tryH2Server = null;
+    Server tryWebServer = null;
     EntityManagerFactory tryEmf = null;
 
     try {
-      tryServer = Server.createTcpServer(DatabaseConfig.DB_ARGS).start();
-      log.info("{}", "H2 database server started and connection is open.");
-      log.info("{}", "URL: " + tryServer.getURL());
+      // Start H2 database server
+      tryH2Server = Server.createTcpServer(DatabaseConfig.DB_ARGS_TCP).start();
+      log.info("H2 database server started and connection is open.");
+      log.info("URL (h2): {}", tryH2Server.getURL());
+
+      // Start H2 web server
+      tryWebServer = Server.createWebServer(DatabaseConfig.DB_ARGS_WEB).start();
+      log.info("URL (web): {}", tryWebServer.getURL());
+
+      // Create EntityManagerFactory
       tryEmf = Persistence.createEntityManagerFactory(DatabaseConfig.PERSISTENCE_UNIT);
 
     } catch (SQLException e) {
-      log.error("{}", "Failed to start H2 database server.", e);
+      log.error("Failed to start H2 database server.", e);
       System.exit(0);
     }
 
-    dbServer = tryServer;
+    h2Server = tryH2Server;
+    webServer = tryWebServer;
     emf = tryEmf;
-    // Stop the H2 database server
+
+    // Stop the H2 database server on shutdown
     Runtime.getRuntime().addShutdownHook(new Thread(() -> {
       emf.close();
-      log.info("{}", "EMF closed");
-      dbServer.stop();
-      log.info("{}", "H2 database server stopped.");
-    }));
+      log.info("EMF closed");
 
+      h2Server.stop();
+      webServer.stop();
+      log.info("H2 database server stopped.");
+    }));
   }
 
   public static EntityManagerFactory getEntityManagerFactory() {
@@ -78,17 +80,19 @@ public class App {
    */
   public static void main(String[] args) {
 
-    try(DataGenerator dataGenerator =
-    DataGenerator.builder()
-      .entityManagerFactory(getEntityManagerFactory())
-      .bookCount(2000)
-      .authorCount(180)
-      .userCount(1000)
-      .loanCount(2000)
-      .build()) {
+    // Generate sample data
+    try (DataGenerator dataGenerator =
+           DataGenerator.builder()
+             .entityManagerFactory(getEntityManagerFactory())
+             .bookCount(2000)
+             .authorCount(180)
+             .userCount(1000)
+             .loanCount(2000)
+             .build()) {
       dataGenerator.generateData();
-      }
+    }
 
+    // Perform basic JPA queries
     try (EntityManager entityManager = getEntityManagerFactory().createEntityManager()) {
       entityManager.createQuery("select a from Author a", Author.class)
         .setFirstResult(0)
@@ -97,5 +101,12 @@ public class App {
         .map(Object::toString)
         .forEach(log::info);
     }
+  }
+
+  private static final class DatabaseConfig {
+    private static final String[] DB_ARGS_TCP = {"-tcpAllowOthers", "-ifNotExists"};
+    private static final String[] DB_ARGS_WEB = {"-webAllowOthers"};
+
+    private static final String PERSISTENCE_UNIT = "tpJakartaUnit";
   }
 }
