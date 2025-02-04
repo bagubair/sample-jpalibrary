@@ -1,37 +1,56 @@
 package fr.univtln.bruno.samples.jpa.samples.jpa.model.documents;
 
 import fr.univtln.bruno.samples.jpa.model.documents.Book;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import jakarta.persistence.*;
+import jakarta.validation.ConstraintViolationException;
+import org.junit.jupiter.api.*;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.EntityManagerFactory;
-import jakarta.persistence.Persistence;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class BookIT {
 
-  private EntityManagerFactory entityManagerFactory;
+  private static EntityManagerFactory entityManagerFactory;
   private EntityManager entityManager;
 
-  @BeforeEach
-  void setUp() {
-    entityManagerFactory = Persistence.createEntityManagerFactory("testjpaUnit");
-    entityManager = entityManagerFactory.createEntityManager();
+  // Provides invalid ISBN values including null for parameterized tests
+  static Stream<String> invalidIsbnProvider() {
+    return Stream.of("", " ", null);
   }
 
-  @AfterEach
-  void tearDown() {
-    if (entityManager != null) {
-      entityManager.close();
-    }
+  // Sets up the EntityManagerFactory before all tests
+  @BeforeAll
+  static void setUpBeforeAll() {
+    entityManagerFactory = Persistence.createEntityManagerFactory("testjpaUnit");
+  }
+
+  // Closes the EntityManagerFactory after all tests
+  @AfterAll
+  static void tearDownAfterAll() {
     if (entityManagerFactory != null) {
       entityManagerFactory.close();
     }
   }
 
+  // Sets up the EntityManager before each test
+  @BeforeEach
+  void setUp() {
+    entityManager = entityManagerFactory.createEntityManager();
+  }
+
+  // Closes the EntityManager after each test
+  @AfterEach
+  void tearDown() {
+    if (entityManager != null) {
+      entityManager.close();
+    }
+  }
+
+  // Tests persisting and retrieving a valid Book entity
   @Test
   void persistAndRetrieveBook() {
     Book book = Book.builder()
@@ -51,76 +70,42 @@ class BookIT {
     assertEquals(300, retrievedBook.getPages());
   }
 
-  @Test
-  void persistBookWithZeroPages() {
+  // Parameterized test for persisting a Book with invalid page numbers
+  @ParameterizedTest
+  @ValueSource(ints = {0, -100})
+  void persistBookWithInvalidPages(int pages) {
     Book book = Book.builder()
       .isbn("978-3-16-148410-0")
-      .pages(0)
+      .pages(pages)
       .build();
 
-    entityManager.getTransaction().begin();
-    Exception exception = assertThrows(jakarta.persistence.RollbackException.class, () -> {
-      entityManager.persist(book);
-      entityManager.getTransaction().commit();
-    });
+    EntityTransaction transaction = entityManager.getTransaction();
+    transaction.begin();
+    entityManager.persist(book);
+    Exception exception = assertThrows(RollbackException.class, transaction::commit);
+
     Throwable cause = exception.getCause();
     assertNotNull(cause);
-    assertInstanceOf(jakarta.validation.ConstraintViolationException.class, cause);
+    assertInstanceOf(ConstraintViolationException.class, cause);
     entityManager.getTransaction().rollback();
   }
 
-  @Test
-  void persistBookWithNegativePages() {
+  // Parameterized test for persisting a Book with invalid ISBN values
+  @ParameterizedTest
+  @MethodSource("invalidIsbnProvider")
+  void persistBookWithInvalidIsbn(String isbn) {
     Book book = Book.builder()
-      .isbn("978-3-16-148410-0")
-      .pages(-100)
-      .build();
-
-    entityManager.getTransaction().begin();
-    Exception exception = assertThrows(jakarta.persistence.RollbackException.class, () -> {
-      entityManager.persist(book);
-      entityManager.getTransaction().commit();
-    });
-    Throwable cause = exception.getCause();
-    assertNotNull(cause);
-    assertInstanceOf(jakarta.validation.ConstraintViolationException.class, cause);
-    entityManager.getTransaction().rollback();
-  }
-
-  @Test
-  void persistBookWithBlankIsbn() {
-    Book book = Book.builder()
-      .isbn("")
+      .isbn(isbn)
       .pages(300)
       .build();
 
-    entityManager.getTransaction().begin();
-    Exception exception = assertThrows(jakarta.persistence.RollbackException.class, () -> {
-      entityManager.persist(book);
-      entityManager.getTransaction().commit();
-    });
+    EntityTransaction transaction = entityManager.getTransaction();
+    transaction.begin();
+    entityManager.persist(book);
+    Exception exception = assertThrows(RollbackException.class, transaction::commit);
     Throwable cause = exception.getCause();
     assertNotNull(cause);
-    assertInstanceOf(jakarta.validation.ConstraintViolationException.class, cause);
+    assertInstanceOf(ConstraintViolationException.class, cause);
     entityManager.getTransaction().rollback();
   }
-
-  @Test
-  void persistBookWithNullIsbn() {
-    Book book = Book.builder()
-      .isbn(null)
-      .pages(300)
-      .build();
-
-    entityManager.getTransaction().begin();
-    Exception exception = assertThrows(jakarta.persistence.RollbackException.class, () -> {
-      entityManager.persist(book);
-      entityManager.getTransaction().commit();
-    });
-    Throwable cause = exception.getCause();
-    assertNotNull(cause);
-    assertInstanceOf(jakarta.validation.ConstraintViolationException.class, cause);
-    entityManager.getTransaction().rollback();
-  }
-
 }
