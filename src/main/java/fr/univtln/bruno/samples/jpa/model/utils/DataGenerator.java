@@ -53,6 +53,7 @@ public class DataGenerator implements AutoCloseable {
     this.loanCount = loanCount;
     this.entityManager = entityManagerFactory.createEntityManager();
   }
+  
 
   /**
    * Creates a new Author with random data.
@@ -145,7 +146,8 @@ public class DataGenerator implements AutoCloseable {
   public User createUser() {
     User user = new User();
     user.setName(faker.name().fullName());
-    user.setEmail(faker.internet().emailAddress());
+    //user.setEmail(faker.internet().emailAddress());
+    user.setEmail(faker.internet().emailAddress() + "_" + UUID.randomUUID());
     return user;
   }
 

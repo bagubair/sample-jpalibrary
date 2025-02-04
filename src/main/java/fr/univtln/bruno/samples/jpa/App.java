@@ -8,6 +8,8 @@ import jakarta.persistence.Persistence;
 import lombok.extern.slf4j.Slf4j;
 import org.h2.tools.Server;
 
+import com.github.javafaker.Book;
+
 import java.sql.SQLException;
 
 /**
@@ -36,7 +38,8 @@ public class App {
   private static final Server dbServer;
 
   private static final class DatabaseConfig {
-    private static final String DB_ARGS[] = {"-tcpAllowOthers","-webAllowOthers","-pgAllowOthers","-ifNotExists"};
+    private static final String DB_ARGS_TCP[] = { "-tcpAllowOthers", "-pgAllowOthers", "-ifNotExists" };
+    private static final String DB_ARGS_WEB[] = { "-webAllowOthers", "-webPort", "9090" };
     private static final String PERSISTENCE_UNIT = "tpJakartaUnit";
   }
 
@@ -45,9 +48,12 @@ public class App {
     EntityManagerFactory tryEmf = null;
 
     try {
-      tryServer = Server.createTcpServer(DatabaseConfig.DB_ARGS).start();
+      tryServer = Server.createTcpServer(DatabaseConfig.DB_ARGS_TCP).start();
+
       log.info("{}", "H2 database server started and connection is open.");
       log.info("{}", "URL: " + tryServer.getURL());
+      tryServer = Server.createWebServer(DatabaseConfig.DB_ARGS_WEB).start();
+      log.info("{}", "URL (web): " + tryServer.getURL());
       tryEmf = Persistence.createEntityManagerFactory(DatabaseConfig.PERSISTENCE_UNIT);
 
     } catch (SQLException e) {
@@ -96,5 +102,7 @@ public class App {
         .map(Object::toString)
         .forEach(log::info);
     }
+
+    
   }
 }
