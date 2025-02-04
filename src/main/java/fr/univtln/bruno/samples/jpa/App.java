@@ -1,6 +1,9 @@
 package fr.univtln.bruno.samples.jpa;
 
+import fr.univtln.bruno.samples.jpa.model.Loan;
 import fr.univtln.bruno.samples.jpa.model.documents.Author;
+import fr.univtln.bruno.samples.jpa.model.documents.Document;
+import fr.univtln.bruno.samples.jpa.model.users.User;
 import fr.univtln.bruno.samples.jpa.model.utils.DataGenerator;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
@@ -8,9 +11,13 @@ import jakarta.persistence.Persistence;
 import lombok.extern.slf4j.Slf4j;
 import org.h2.tools.Server;
 
-import com.github.javafaker.Book;
+///import com.github.javafaker.Book;
 
 import java.sql.SQLException;
+import java.time.LocalDate;
+import java.util.List;
+
+
 
 /**
  * Main application class that manages the JPA EntityManagerFactory and H2 database server.
@@ -29,13 +36,15 @@ import java.sql.SQLException;
 public class App {
 
   private static final EntityManagerFactory emf;
-
-  private static final Server dbServer;
-
+  private static final Server h2Server;
+  private static final Server webServer;
+/* 
   private static final class DatabaseConfig {
-    private static final String DB_ARGS[] = {"-tcpAllowOthers","-webAllowOthers","-pgAllowOthers","-ifNotExists"};
+    private static final String DB_ARGS_TCP[] = { "-tcpAllowOthers", "-pgAllowOthers", "-ifNotExists" };
+    private static final String DB_ARGS_WEB[] = { "-webAllowOthers", "-webPort", "9090" };
     private static final String PERSISTENCE_UNIT = "tpJakartaUnit";
   }
+*/
 
   static {
     Server tryH2Server = null;
@@ -43,9 +52,17 @@ public class App {
     EntityManagerFactory tryEmf = null;
 
     try {
-      tryServer = Server.createTcpServer(DatabaseConfig.DB_ARGS).start();
-      log.info("{}", "H2 database server started and connection is open.");
-      log.info("{}", "URL: " + tryServer.getURL());
+      // Start H2 database server
+      tryH2Server = Server.createTcpServer(DatabaseConfig.DB_ARGS_TCP).start();
+      log.info("H2 database server started and connection is open.");
+      log.info("URL (h2): {}", tryH2Server.getURL());
+
+      // Start H2 web server
+      tryWebServer = Server.createWebServer(DatabaseConfig.DB_ARGS_WEB).start();
+      log.info("URL (web): {}", tryWebServer.getURL());
+
+      // Create EntityManagerFactory
+
       tryEmf = Persistence.createEntityManagerFactory(DatabaseConfig.PERSISTENCE_UNIT);
 
     } catch (SQLException e) {
@@ -66,6 +83,7 @@ public class App {
       webServer.stop();
       log.info("H2 database server stopped.");
     }));
+
   }
 
   public static EntityManagerFactory getEntityManagerFactory() {
@@ -101,7 +119,42 @@ public class App {
         .forEach(log::info);
     }
 
-    
+    try (EntityManager entityManager = getEntityManagerFactory().createEntityManager()) {
+      entityManager.createQuery("select d from Document d LEFT JOIN d.authors a WHERE a.id = :authorId", Document.class)
+        .setParameter("authorId", 1L)
+        .setFirstResult(0)
+        .getResultStream()
+        .map(Object::toString)
+        .forEach(log::info);
+    }
+
+    try (EntityManager entityManager = getEntityManagerFactory().createEntityManager()) {
+      entityManager.createQuery("SELECT l FROM Loan l WHERE l.returnDate IS NULL OR l.dueDate > :today", Loan.class)
+        .setParameter("today", LocalDate.now())  // Utilisation de la date actuelle
+        .setFirstResult(0)
+        .setMaxResults(10)
+        .getResultStream()
+        .map( l -> l.getDocument().getTitle())
+        .forEach(log::info);
+    }
+    try (EntityManager entityManager = getEntityManagerFactory().createEntityManager()) {
+      List<Object[]> results = entityManager.createQuery(
+          "SELECT l.user, COUNT(l) FROM Loan l GROUP BY l.user", Object[].class)
+          .setFirstResult(0)
+          .setMaxResults(10)
+          .getResultList();  // On récupère la liste complète
+  
+      results.forEach(row -> {
+          User user = (User) row[0];
+          Long loanCount = (Long) row[1];
+          log.info(user.getName() + " a " + loanCount + " emprunts.");
+      });
+  }
+  
+
+    emf.close();
+    h2Server.stop();
+    webServer.stop();
   }
 
   private static final class DatabaseConfig {
@@ -110,4 +163,5 @@ public class App {
 
     private static final String PERSISTENCE_UNIT = "tpJakartaUnit";
   }
+  
 }

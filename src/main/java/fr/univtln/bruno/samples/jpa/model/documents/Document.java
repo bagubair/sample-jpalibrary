@@ -38,6 +38,7 @@ import java.util.List;
 @NoArgsConstructor(access = lombok.AccessLevel.PROTECTED)
 @Getter
 @Setter
+@ToString(onlyExplicitlyIncluded = true)
 public class Document {
 
   /**
@@ -53,6 +54,7 @@ public class Document {
   /**
    * The title of the document.
    */
+  @ToString.Include
   private String title;
 
   /**
