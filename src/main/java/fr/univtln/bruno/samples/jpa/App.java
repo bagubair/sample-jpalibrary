@@ -1,6 +1,7 @@
 package fr.univtln.bruno.samples.jpa;
 
 import fr.univtln.bruno.samples.jpa.model.Loan;
+import fr.univtln.bruno.samples.jpa.model.StatistiquesEmpruntDTO;
 import fr.univtln.bruno.samples.jpa.model.documents.Author;
 import fr.univtln.bruno.samples.jpa.model.documents.Document;
 import fr.univtln.bruno.samples.jpa.model.users.User;
@@ -8,6 +9,7 @@ import fr.univtln.bruno.samples.jpa.model.utils.DataGenerator;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.Persistence;
+import jakarta.persistence.TypedQuery;
 import lombok.extern.slf4j.Slf4j;
 import org.h2.tools.Server;
 
@@ -16,6 +18,9 @@ import org.h2.tools.Server;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 
 
@@ -116,40 +121,74 @@ public class App {
         .setMaxResults(10)
         .getResultStream()
         .map(Object::toString)
-        .forEach(log::info);
+        .forEach(System.out::println);
     }
 
     try (EntityManager entityManager = getEntityManagerFactory().createEntityManager()) {
-      entityManager.createQuery("select d from Document d LEFT JOIN d.authors a WHERE a.id = :authorId", Document.class)
-        .setParameter("authorId", 1L)
+      Long authorId = 5L;
+      Stream<Document> documentsAuthor = entityManager.createQuery("select d from Document d LEFT JOIN d.authors a WHERE a.id = :authorId", Document.class)
+        .setParameter("authorId", authorId)
         .setFirstResult(0)
-        .getResultStream()
-        .map(Object::toString)
-        .forEach(log::info);
+        .getResultStream();
+
+      log.info("Documents de l'auteur ( %d ) : ".formatted(authorId));
+      documentsAuthor.map(Document::toString).forEach(System.out::println);
     }
 
     try (EntityManager entityManager = getEntityManagerFactory().createEntityManager()) {
-      entityManager.createQuery("SELECT l FROM Loan l WHERE l.returnDate IS NULL OR l.dueDate > :today", Loan.class)
+      Stream<Loan> empruntsEncors = entityManager.createQuery("SELECT l FROM Loan l WHERE l.returnDate IS NULL OR l.dueDate > :today", Loan.class)
         .setParameter("today", LocalDate.now())  // Utilisation de la date actuelle
         .setFirstResult(0)
         .setMaxResults(10)
-        .getResultStream()
-        .map( l -> l.getDocument().getTitle())
-        .forEach(log::info);
+        .getResultStream();
+      
+        log.info("Les documents sont en cours d'emprunt: ");
+        empruntsEncors.map( l -> l.getDocument().getTitle()).forEach(System.out::println);
+        
     }
     try (EntityManager entityManager = getEntityManagerFactory().createEntityManager()) {
-      List<Object[]> results = entityManager.createQuery(
-          "SELECT l.user, COUNT(l) FROM Loan l GROUP BY l.user", Object[].class)
-          .setFirstResult(0)
-          .setMaxResults(10)
+      Long userId = 4L;
+      List<Object[]> results = entityManager.createQuery("SELECT l.user, COUNT(l) FROM Loan l WHERE l.user.id = :idUser", Object[].class)
+          .setParameter("idUser", userId)
           .getResultList();  // On récupère la liste complète
-  
-      results.forEach(row -> {
-          User user = (User) row[0];
-          Long loanCount = (Long) row[1];
-          log.info(user.getName() + " a " + loanCount + " emprunts.");
-      });
+
+      if (!results.isEmpty()) {  // Vérifie si des résultats existent
+            Object[] row = results.get(0); // Récupère la première ligne du résultat
+            User user = (User) row[0];  // Le premier élément est un User
+            Long count = (Long) row[1]; // Le deuxième élément est le COUNT
+    
+            log.info("Nombre de documents empruntés par l'utilisateur ( {} ) : {}", user.getName(), count);
+      } else {
+            log.info("Aucun document emprunté par cet utilisateur.");
+      }
   }
+  try (EntityManager entityManager = getEntityManagerFactory().createEntityManager()) {
+    TypedQuery<StatistiquesEmpruntDTO> query = entityManager.createQuery(
+        "SELECT new fr.univtln.bruno.samples.jpa.model.StatistiquesEmpruntDTO(l.document.title, COUNT(l)) FROM Loan l GROUP BY l.document",
+        StatistiquesEmpruntDTO.class);
+    
+    log.info("Statistiques des emprunts par document : ");
+    query.setMaxResults(10).getResultList().forEach(System.out::println);
+  }
+  try (EntityManager entityManager = getEntityManagerFactory().createEntityManager()) {
+    List<Document> documents = entityManager.createQuery(
+        "SELECT DISTINCT d FROM Document d LEFT JOIN FETCH d.authors", Document.class)
+        .setMaxResults(10)
+        .getResultList();
+
+    log.info("Liste des documents et leurs auteurs :");
+
+    for (Document doc : documents) {
+        String title = doc.getTitle();
+        String authorsList = doc.getAuthors().stream()
+                                .map(Author::getName)
+                                .collect(Collectors.joining(", "));
+
+        log.info("Document : {} - Auteurs : {}", title, authorsList);
+    }
+}
+
+
   
 
     emf.close();

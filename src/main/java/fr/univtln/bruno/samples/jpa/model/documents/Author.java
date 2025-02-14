@@ -38,6 +38,7 @@ public class Author {
    */
   @Column(nullable = false)
   @Setter
+  @Getter
   @ToString.Include
   private String name;
 
